@@ -1,0 +1,15 @@
+# 排除与构建/运行无关的文件，减小 context 和镜像
+# 注意：不要排除 robotwin-data/，以便需要时把数据打进镜像
+# 保留 .git/.gitmodules，镜像内需用 git submodule update 初始化 RoboTwin
+
+.cursor
+**/__pycache__
+**/*.pyc
+**/.venv
+**/venv
+**/*.egg-info
+**/.mypy_cache
+**/.pytest_cache
+**/.ruff_cache
+*.log
+.DS_Store

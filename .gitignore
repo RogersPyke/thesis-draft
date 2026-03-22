@@ -1,0 +1,4 @@
+robotwin-data/*
+.cursor/
+logs/
+nohup.out
