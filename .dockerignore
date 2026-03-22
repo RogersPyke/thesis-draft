@@ -1,8 +1,72 @@
-# 排除与构建/运行无关的文件，减小 context 和镜像
-# 注意：不要排除 robotwin-data/，以便需要时把数据打进镜像
-# 保留 .git/.gitmodules，镜像内需用 git submodule update 初始化 RoboTwin
+# =============================================================================
+# thesis-draft root .gitignore (verbatim)
+# =============================================================================
+robotwin-data/*
+.cursor/
+logs/
+nohup.out
 
-.cursor
+# =============================================================================
+# third_party/RoboTwin/.gitignore (paths relative to repo root)
+# =============================================================================
+third_party/RoboTwin/models/
+third_party/RoboTwin/result/
+third_party/RoboTwin/eval_video/
+third_party/RoboTwin/eval_result/
+third_party/RoboTwin/task_config/
+third_party/RoboTwin/viewer_show.*
+third_party/RoboTwin/docs/
+third_party/RoboTwin/policy/weights/
+third_party/RoboTwin/envs/curobo/
+third_party/RoboTwin/envs/curobo/**
+third_party/RoboTwin/assets/
+!third_party/RoboTwin/assets/_download.py
+!third_party/RoboTwin/assets/files/
+!third_party/RoboTwin/assets/files/**
+third_party/RoboTwin/**/*.zip
+third_party/RoboTwin/.vscode/
+third_party/RoboTwin/config.json
+third_party/RoboTwin/*.json*
+third_party/RoboTwin/*.txt
+
+# =============================================================================
+# Nested .gitignore under RoboTwin (ACT, DP, DP3, RDT, openvla-oft, pi0, pi05,
+# rlds_dataset_builder). Broad patterns under the submodule only.
+# Does NOT copy script/curobo/.gitignore wholesale (that file ignores source
+# like requirements.txt and *.json; only artifact-style paths below).
+# =============================================================================
+third_party/RoboTwin/**/data/
+third_party/RoboTwin/**/training_data/
+third_party/RoboTwin/**/processed_data/
+third_party/RoboTwin/**/checkpoints/
+third_party/RoboTwin/**/wandb/
+third_party/RoboTwin/**/outputs/
+third_party/RoboTwin/**/results/
+third_party/RoboTwin/**/rollouts/
+third_party/RoboTwin/**/cache/
+third_party/RoboTwin/**/data_local/
+third_party/RoboTwin/**/bin/
+third_party/RoboTwin/**/_wandb/
+third_party/RoboTwin/**/logs/
+third_party/RoboTwin/**/ray/auth.json
+third_party/RoboTwin/**/fuse.cfg
+third_party/RoboTwin/**/.idea/
+third_party/RoboTwin/policy/ACT/act_ckpt/
+third_party/RoboTwin/policy/ACT/act-ckpt/
+third_party/RoboTwin/policy/RDT/data/datasets/
+third_party/RoboTwin/policy/openvla-oft/aloha_ckpts_and_logs/
+third_party/RoboTwin/policy/openvla-oft/tensorflow_datasets/
+third_party/RoboTwin/policy/openvla-oft/eval_*.share
+third_party/RoboTwin/policy/openvla-oft/finetune_*.sh
+third_party/RoboTwin/policy/openvla-oft/log.txt
+third_party/RoboTwin/**/*chkpt*
+third_party/RoboTwin/policy/DP3/third_party/
+third_party/RoboTwin/script/curobo/experiments/
+third_party/RoboTwin/script/curobo/docker/pkgs/
+
+# =============================================================================
+# Docker-only (typical build noise; not necessarily in every .gitignore)
+# =============================================================================
 **/__pycache__
 **/*.pyc
 **/.venv
@@ -11,5 +75,6 @@
 **/.mypy_cache
 **/.pytest_cache
 **/.ruff_cache
-*.log
+**/*.log
 .DS_Store
+**/*_ckpt/

@@ -8,7 +8,7 @@
 #   RoboTwin       TinyVLA eval lockfile (Eval_Tiny_DexVLA_environment.yml; Tsinghua mirror lines stripped)
 #
 # GPU: install PyTorch+CUDA inside envs; run with --gpus all and a matching host driver (NVIDIA Container Toolkit).
-# Data: mount or bake robotwin-data at runtime; image does not require it for env creation.
+# Large paths: see .dockerignore (root .gitignore + aggregated third_party/RoboTwin/** .gitignore rules + Docker-only). Mount data at runtime if needed.
 #
 # Build options (optional, all default 1):
 #   docker build --build-arg INSTALL_RLDS=0 ...
