@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-# Purpose: Upload a local folder to ModelScope as a repository via the `modelscope` CLI.
-# Dependencies: modelscope package (provides `modelscope` console script), Python 3.8+.
+# Purpose: Upload a local folder to Hugging Face Hub as a repository via the `hf`/`huggingface-cli` CLI.
+# Dependencies: huggingface_hub package (provides `huggingface-cli` or `hf`), Python 3.8+.
 # Usage:
-#   export MS_TOKEN=<your_sdk_token>
-#   python3 upload.py /path/to/folder [--repo-name NAME] [--namespace rogerspyke]
+#   export HF_TOKEN=<your_access_token>
+#   python3 hf_up.py /path/to/folder [--repo-name NAME] [--namespace RogersPyke] [--repo-type model|dataset]
 #
-#   python3 upload.py /path/to/folder --token <your_sdk_token>
+#   python3 hf_up.py /path/to/folder --token <your_access_token>
 
 from __future__ import annotations
 
@@ -21,8 +21,8 @@ from pathlib import Path
 from typing import List, Optional
 
 LOG_DIR = Path(__file__).resolve().parent / "logs"
-DEFAULT_NAMESPACE = "rogerspyke"
-ENV_TOKEN = "MS_TOKEN"
+DEFAULT_NAMESPACE = "RogersPyke"
+ENV_TOKEN = "HF_TOKEN"
 
 
 def _utc8_now() -> datetime:
@@ -37,8 +37,8 @@ def _setup_logging() -> logging.Logger:
     """
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     ts = _utc8_now().strftime("%Y%m%d%H%M%S")
-    log_path = LOG_DIR / f"upload_{ts}.log"
-    logger = logging.getLogger("upload")
+    log_path = LOG_DIR / f"hf_upload_{ts}.log"
+    logger = logging.getLogger("hf_upload")
     logger.setLevel(logging.DEBUG)
     if logger.handlers:
         return logger
@@ -59,7 +59,7 @@ def resolve_token(cli_token: Optional[str], logger: logging.Logger) -> Optional[
     """
     @input: cli_token Optional[str]; logger
     @output: str token or None if missing
-    @scenario: Token from --token or MS_TOKEN
+    @scenario: Token from --token or HF_TOKEN
     """
     t = (cli_token or os.environ.get(ENV_TOKEN) or "").strip()
     if not t:
@@ -71,7 +71,7 @@ def resolve_token(cli_token: Optional[str], logger: logging.Logger) -> Optional[
 def sanitize_repo_name(name: str) -> str:
     """
     @input: str raw folder/repo name
-    @output: str safe repo segment for ModelScope repo_id
+    @output: str safe repo segment for Hugging Face repo_id
     @scenario: Map folder basename to valid repo name
     """
     s = name.strip().strip("/")
@@ -82,17 +82,20 @@ def sanitize_repo_name(name: str) -> str:
     return s or "upload-repo"
 
 
-def find_modelscope_cli(logger: logging.Logger) -> Optional[str]:
+def find_hf_cli(logger: logging.Logger) -> Optional[str]:
     """
     @input: logger
-    @output: str path to modelscope executable, or None if missing
+    @output: str path to hf or huggingface-cli executable, or None if missing
     @scenario: Ensure CLI is available before subprocess calls
     """
-    p = shutil.which("modelscope")
-    if not p:
-        logger.error("'modelscope' CLI not found. Install: pip install modelscope")
-        return None
-    return p
+    for cmd in ("hf", "huggingface-cli"):
+        p = shutil.which(cmd)
+        if p:
+            return p
+    logger.error(
+        "'hf' or 'huggingface-cli' not found. Install: pip install huggingface_hub"
+    )
+    return None
 
 
 def _argv_for_log(argv: List[str]) -> str:
@@ -104,9 +107,12 @@ def _argv_for_log(argv: List[str]) -> str:
             out.append("<redacted>")
             skip_next = False
             continue
-        if a == "--token":
-            out.append(a)
-            skip_next = True
+        if a in ("--token", "-t") or (a.startswith("--token=") or a.startswith("-t=")):
+            if "=" in a:
+                out.append(a.split("=", 1)[0] + "=<redacted>")
+            else:
+                out.append(a)
+                skip_next = True
         else:
             out.append(a)
     return " ".join(out)
@@ -120,7 +126,7 @@ def run_cmd(
     """
     @input: logger; argv full command list; cwd optional working directory
     @output: None; raises CalledProcessError on failure
-    @scenario: Run modelscope subcommands with captured output in logs
+    @scenario: Run hf/huggingface-cli subcommands with captured output in logs
     """
     logger.info("RUN: %s", _argv_for_log(argv))
     r = subprocess.run(
@@ -157,24 +163,27 @@ def ensure_repo_and_upload(
     commit_message: Optional[str],
 ) -> None:
     """
-    @input: modelscope path, token, repo_id namespace/name, local folder, repo_type model|dataset
+    @input: hf/huggingface-cli path, token, repo_id namespace/name, local folder, repo_type model|dataset
     @output: None on success
     @scenario: create repo (exist_ok) then upload folder contents to repo root
     """
     create_argv = [
         cli,
+        "repo",
         "create",
         repo_id,
         "--token",
         token,
-        "--repo_type",
+        "--repo-type",
         repo_type,
+        "--exist-ok",
     ]
     upload_argv = [
         cli,
         "upload",
         repo_id,
         str(folder.resolve()),
+        ".",
         "--token",
         token,
         "--repo-type",
@@ -194,7 +203,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     @scenario: CLI for folder path and optional overrides
     """
     p = argparse.ArgumentParser(
-        description="Upload a folder to ModelScope using the modelscope CLI.",
+        description="Upload a folder to Hugging Face Hub using the hf/huggingface-cli.",
     )
     p.add_argument(
         "folder",
@@ -204,7 +213,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument(
         "--namespace",
         default=DEFAULT_NAMESPACE,
-        help=f"ModelScope namespace/user (default: {DEFAULT_NAMESPACE}).",
+        help=f"Hugging Face namespace/user (default: {DEFAULT_NAMESPACE}).",
     )
     p.add_argument(
         "--repo-name",
@@ -214,13 +223,13 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument(
         "--token",
         default=None,
-        help=f"ModelScope SDK token; else read from env {ENV_TOKEN}.",
+        help=f"Hugging Face access token; else read from env {ENV_TOKEN}.",
     )
     p.add_argument(
         "--repo-type",
         choices=("model", "dataset"),
-        default="model",
-        help="Repository type (default: model).",
+        default="dataset",
+        help="Repository type (default: dataset).",
     )
     p.add_argument(
         "--commit-message",
@@ -234,7 +243,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     """
     @input: argv optional CLI tokens
     @output: int exit code 0 ok, non-zero on error
-    @scenario: End-to-end folder upload to ModelScope
+    @scenario: End-to-end folder upload to Hugging Face Hub
     """
     logger = _setup_logging()
     args = parse_args(argv)
@@ -245,7 +254,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     token = resolve_token(args.token, logger)
     if not token:
         return 2
-    cli = find_modelscope_cli(logger)
+    cli = find_hf_cli(logger)
     if not cli:
         return 127
     base = args.repo_name or folder.name
