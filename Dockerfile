@@ -8,6 +8,7 @@
 #   RoboTwin       TinyVLA eval lockfile (Eval_Tiny_DexVLA_environment.yml; Tsinghua mirror lines stripped)
 #
 # GPU: install PyTorch+CUDA inside envs; run with --gpus all and a matching host driver (NVIDIA Container Toolkit).
+# Base: nvidia/cuda provides CUDA_HOME for cuRobo CUDA extension build.
 # Large paths: see .dockerignore (root .gitignore + aggregated third_party/RoboTwin/** .gitignore rules + Docker-only). Mount data at runtime if needed.
 #
 # Build options (optional, all default 1):
@@ -15,7 +16,7 @@
 #   docker build --build-arg INSTALL_DEXVLA=0 ...
 #   docker build --build-arg INSTALL_EVAL_ROBOTWIN=0 ...
 
-FROM condaforge/miniforge3:latest AS base
+FROM nvidia/cuda:12.1.0-devel-ubuntu22.04 AS base
 
 ARG THESIS_PYTHON_VERSION=3.11
 ARG INSTALL_RLDS=1
@@ -27,6 +28,23 @@ ENV TZ=UTC
 ENV MUJOCO_GL=egl
 ENV PYTHONUNBUFFERED=1
 ENV CONDA_ALWAYS_YES=true
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH="${CUDA_HOME}/bin:${PATH}"
+
+# Install miniforge (conda) - no condaforge base; we add conda on CUDA image
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    && curl -L -o /tmp/miniforge.sh "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-$(uname -m).sh" \
+    && bash /tmp/miniforge.sh -b -p /opt/conda \
+    && rm /tmp/miniforge.sh \
+    && /opt/conda/bin/conda init bash \
+    && ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh \
+    && echo ". /opt/conda/etc/profile.d/conda.sh" >> /etc/bash.bashrc \
+    && apt-get purge -y --auto-remove curl \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PATH="/opt/conda/bin:${PATH}"
 
 # OS packages: render/OpenGL, media, and common build tools for pip/conda native extensions
 RUN apt-get update && apt-get install -y --no-install-recommends \

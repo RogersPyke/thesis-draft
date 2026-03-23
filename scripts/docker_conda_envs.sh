@@ -20,6 +20,17 @@ strip_tuna_mirrors() {
   sed '/mirrors\.tuna\.tsinghua\.edu\.cn/d' "$src" >"$dst"
 }
 
+# Prepare pip_requirements.txt for robotwin-act: exclude nvidia_curobo (we install from submodule)
+# and packaging @ file:// (build-machine path, invalid in Docker).
+# Ensures numpy/torch are installed before curobo build.
+strip_curobo_and_local_refs() {
+  local src="$1"
+  local dst="$2"
+  # Drop nvidia_curobo (install from submodule) and packaging@file:// (build-machine path).
+  # Replace packaging@file:// with plain packaging so the dep is not lost.
+  sed -e '/curobo\.git\|nvidia_curobo/d' -e 's|^packaging\s*@\s*file://[^[:space:]]*|packaging|' "$src" >"$dst"
+}
+
 log() { echo "[docker_conda_envs] $*"; }
 
 if ! command -v conda >/dev/null 2>&1; then
@@ -33,25 +44,34 @@ conda create -n thesis python="${THESIS_PYTHON_VERSION:-3.11}" -y
 conda run -n thesis pip install --no-cache-dir -r "${RW}/script/requirements.txt"
 
 # --- robotwin-act: layered ACT stack (conda explicit @EXPLICIT URLs, then pip lock) ---
+# Python 3.10.19 (pinned in conda_requirements.txt).
 # Source: policy/ACT/env_requ/conda_requirements.txt then policy/ACT/env_requ/pip_requirements.txt
 ACT_ENV_REQU="${RW}/policy/ACT/env_requ"
 if [[ ! -f "${ACT_ENV_REQU}/conda_requirements.txt" ]] || [[ ! -f "${ACT_ENV_REQU}/pip_requirements.txt" ]]; then
   echo "[docker_conda_envs] ERROR: missing ${ACT_ENV_REQU}/conda_requirements.txt or pip_requirements.txt" >&2
   exit 1
 fi
-log "Creating env: robotwin-act (conda --file env_requ/conda_requirements.txt)"
+log "Creating env: robotwin-act (Python 3.10.19, conda --file env_requ/conda_requirements.txt)"
 conda create -n robotwin-act --file "${ACT_ENV_REQU}/conda_requirements.txt" -y
-log "Installing env: robotwin-act pip deps (env_requ/pip_requirements.txt)"
-conda run -n robotwin-act pip install --no-cache-dir -r "${ACT_ENV_REQU}/pip_requirements.txt"
 
-# nvidia-curobo: PyPI has no real wheels for NVlabs cuRobo; install editable from submodule.
+# Install pip deps EXCLUDING nvidia_curobo (we install from submodule) and invalid file:// refs.
+# Order matters: numpy/torch must be installed before curobo build (--no-build-isolation).
+strip_curobo_and_local_refs "${ACT_ENV_REQU}/pip_requirements.txt" /tmp/robotwin_act_pip.txt
+log "Installing env: robotwin-act pip deps (numpy, torch, etc. before curobo)"
+conda run -n robotwin-act pip install --no-cache-dir -r /tmp/robotwin_act_pip.txt
+
+# nvidia-curobo: install editable from submodule. Requires CUDA_HOME and numpy/torch already present.
 # --no-build-isolation: curobo's build needs the env's torch importable (see NVlabs/curobo docs).
 CUROBO_SRC="${RW}/script/curobo"
 if [[ ! -f "${CUROBO_SRC}/setup.cfg" ]]; then
   echo "[docker_conda_envs] ERROR: cuRobo missing at ${CUROBO_SRC} (init git submodule script/curobo)" >&2
   exit 1
 fi
-log "Installing nvidia-curobo (editable) from ${CUROBO_SRC} with pip --no-build-isolation"
+if [[ -z "${CUDA_HOME:-}" ]]; then
+  echo "[docker_conda_envs] ERROR: CUDA_HOME not set; required for cuRobo CUDA extension build" >&2
+  exit 1
+fi
+log "Installing nvidia-curobo (editable) from ${CUROBO_SRC} with CUDA_HOME=${CUDA_HOME}"
 conda run -n robotwin-act pip install --no-cache-dir --no-build-isolation -e "${CUROBO_SRC}"
 
 if [[ "${INSTALL_RLDS}" == "1" ]]; then
