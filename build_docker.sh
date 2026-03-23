@@ -90,23 +90,26 @@ run_build() {
     return 1
   fi
 
-  log_info "Build stage: invoking docker build."
-  if docker build \
+  log_info "Build stage: invoking docker build (streaming to terminal and log via tee -a)."
+  # tee -a: same output in real time on terminal and appended to LOG_FILE.
+  # PIPESTATUS[0] is docker build exit code (tee alone would mask failure under set -e).
+  docker build \
     -f "${DOCKERFILE_PATH}" \
     -t "${IMAGE_NAME}" \
     "$@" \
-    "${BUILD_CONTEXT}"; then
+    "${BUILD_CONTEXT}" 2>&1 | tee -a "${LOG_FILE}"
+  local build_rc="${PIPESTATUS[0]}"
+  if [[ "${build_rc}" -eq 0 ]]; then
     log_success "Build stage: image built successfully."
     return 0
-  else
-    log_err "Build stage: docker build failed."
-    return 1
   fi
+  log_err "Build stage: docker build failed (exit ${build_rc})."
+  return 1
 }
 
 # Pass through extra args correctly (e.g. --no-cache)
 main() {
-  echo "Log file: ${LOG_FILE}" >> "${LOG_FILE}"
+  printf 'Log file: %s\n' "${LOG_FILE}" | tee -a "${LOG_FILE}"
   log_info "Script started."
 
   if run_build "$@"; then

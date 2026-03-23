@@ -32,14 +32,27 @@ log "Creating env: thesis (python 3.11 + script/requirements.txt)"
 conda create -n thesis python="${THESIS_PYTHON_VERSION:-3.11}" -y
 conda run -n thesis pip install --no-cache-dir -r "${RW}/script/requirements.txt"
 
-# --- robotwin-act: full conda explicit export (conda + pip-installed pkgs as pypi_0 pins) ---
-# Source: policy/ACT/requirements.txt (header documents: conda create --name <env> --file <this file>).
-# Channels: export has no channel list; match typical ACT stack (pytorch + nvidia + conda-forge).
-# policy/ACT/conda_env.yaml is an older minimal sketch, not the full lock.
-log "Creating env: robotwin-act (conda create --file policy/ACT/requirements.txt)"
-conda create -n robotwin-act \
-  --file "${RW}/policy/ACT/requirements.txt" \
-  -c pytorch -c nvidia -c conda-forge -c defaults
+# --- robotwin-act: layered ACT stack (conda explicit @EXPLICIT URLs, then pip lock) ---
+# Source: policy/ACT/env_requ/conda_requirements.txt then policy/ACT/env_requ/pip_requirements.txt
+ACT_ENV_REQU="${RW}/policy/ACT/env_requ"
+if [[ ! -f "${ACT_ENV_REQU}/conda_requirements.txt" ]] || [[ ! -f "${ACT_ENV_REQU}/pip_requirements.txt" ]]; then
+  echo "[docker_conda_envs] ERROR: missing ${ACT_ENV_REQU}/conda_requirements.txt or pip_requirements.txt" >&2
+  exit 1
+fi
+log "Creating env: robotwin-act (conda --file env_requ/conda_requirements.txt)"
+conda create -n robotwin-act --file "${ACT_ENV_REQU}/conda_requirements.txt" -y
+log "Installing env: robotwin-act pip deps (env_requ/pip_requirements.txt)"
+conda run -n robotwin-act pip install --no-cache-dir -r "${ACT_ENV_REQU}/pip_requirements.txt"
+
+# nvidia-curobo: PyPI has no real wheels for NVlabs cuRobo; install editable from submodule.
+# --no-build-isolation: curobo's build needs the env's torch importable (see NVlabs/curobo docs).
+CUROBO_SRC="${RW}/script/curobo"
+if [[ ! -f "${CUROBO_SRC}/setup.cfg" ]]; then
+  echo "[docker_conda_envs] ERROR: cuRobo missing at ${CUROBO_SRC} (init git submodule script/curobo)" >&2
+  exit 1
+fi
+log "Installing nvidia-curobo (editable) from ${CUROBO_SRC} with pip --no-build-isolation"
+conda run -n robotwin-act pip install --no-cache-dir --no-build-isolation -e "${CUROBO_SRC}"
 
 if [[ "${INSTALL_RLDS}" == "1" ]]; then
   log "Creating env: rlds_env (openvla-oft RLDS builder, Ubuntu)"

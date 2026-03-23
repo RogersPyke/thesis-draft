@@ -2,7 +2,7 @@
 #
 # Environments (default build):
 #   thesis         Python 3.11 + third_party/RoboTwin/script/requirements.txt (sim / scripts)
-#   robotwin-act   ACT full stack: conda create --file policy/ACT/requirements.txt (+ pytorch/nvidia/conda-forge)
+#   robotwin-act   ACT: conda --file policy/ACT/env_requ/conda_requirements.txt, then pip -r env_requ/pip_requirements.txt
 #   rlds_env       openvla-oft RLDS dataset builder (environment_ubuntu.yml)
 #   dexvla-robo    TinyVLA / DexVLA training lockfile (Train_Tiny_DexVLA_train.yml; same spec in both dirs)
 #   RoboTwin       TinyVLA eval lockfile (Eval_Tiny_DexVLA_environment.yml; Tsinghua mirror lines stripped)
