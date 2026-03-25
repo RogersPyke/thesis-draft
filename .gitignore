@@ -2,3 +2,5 @@ robotwin-data/*
 .cursor/
 logs/
 nohup.out
+**.pyc
+**/__pycache__/**

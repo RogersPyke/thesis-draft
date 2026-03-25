@@ -3,9 +3,10 @@
 # Dependencies: modelscope package (provides `modelscope` console script), Python 3.8+.
 # Usage:
 #   export MS_TOKEN=<your_sdk_token>
-#   python3 upload.py /path/to/folder [--repo-name NAME] [--namespace rogerspyke] [--repo-type model|dataset]
+#   python3 ms_up.py /path/to/folder [--repo-name NAME] [--namespace rogerspyke] [--repo-type model|dataset]
+#       [--batch-size N] [--max-retries -1] [--retry-base-seconds 5] [--retry-max-seconds 300]
 #
-#   python3 upload.py /path/to/folder --token <your_sdk_token>
+#   python3 ms_up.py /path/to/folder --token <your_sdk_token>
 
 from __future__ import annotations
 
@@ -16,9 +17,10 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Iterable, List, Optional, TypeVar
 
 LOG_DIR = Path(__file__).resolve().parent / "logs"
 DEFAULT_NAMESPACE = "rogerspyke"
@@ -112,6 +114,15 @@ def _argv_for_log(argv: List[str]) -> str:
     return " ".join(out)
 
 
+_T = TypeVar("_T")
+
+
+def _chunks(items: List[_T], size: int) -> Iterable[List[_T]]:
+    """Yield consecutive slices of `items` with length at most `size` (size must be >= 1)."""
+    for i in range(0, len(items), size):
+        yield items[i : i + size]
+
+
 def run_cmd(
     logger: logging.Logger,
     argv: List[str],
@@ -120,30 +131,57 @@ def run_cmd(
     """
     @input: logger; argv full command list; cwd optional working directory
     @output: None; raises CalledProcessError on failure
-    @scenario: Run modelscope subcommands with captured output in logs
+    @scenario: Run modelscope with inherited stdio so TTY-aware CLIs show live progress on console
     """
     logger.info("RUN: %s", _argv_for_log(argv))
-    r = subprocess.run(
-        argv,
-        cwd=cwd,
-        text=True,
-        capture_output=True,
+    logger.debug(
+        "Subprocess inherits stdout/stderr (no capture); CLI output appears on console only.",
     )
-    if r.stdout:
-        logger.debug("stdout:\n%s", r.stdout.rstrip())
-    if r.stderr:
-        logger.debug("stderr:\n%s", r.stderr.rstrip())
+    r = subprocess.run(argv, cwd=cwd)
     if r.returncode != 0:
         logger.error(
             "Command failed (exit %s): %s",
             r.returncode,
             " ".join(argv),
         )
-        if r.stdout:
-            sys.stdout.write(r.stdout)
-        if r.stderr:
-            sys.stderr.write(r.stderr)
         r.check_returncode()
+
+
+def run_cmd_with_retry(
+    logger: logging.Logger,
+    argv: List[str],
+    cwd: Optional[str] = None,
+    *,
+    max_retries: int = -1,
+    retry_base_seconds: float = 5.0,
+    retry_max_seconds: float = 300.0,
+) -> None:
+    """
+    @input: logger; argv; cwd; max_retries (-1=unlimited, 0=fail on first error);
+            retry_base_seconds; retry_max_seconds cap for backoff
+    @output: None on success
+    @scenario: Retry subprocess until success or finite limit
+    """
+    failures = 0
+    while True:
+        try:
+            run_cmd(logger, argv, cwd)
+            return
+        except subprocess.CalledProcessError:
+            if max_retries >= 0 and failures >= max_retries:
+                logger.error("Giving up after %s failed attempt(s)", failures + 1)
+                raise
+            delay = min(
+                retry_base_seconds * (2**failures),
+                retry_max_seconds,
+            )
+            logger.warning(
+                "Command failed (attempt %s); retrying in %.1fs",
+                failures + 1,
+                delay,
+            )
+            time.sleep(delay)
+            failures += 1
 
 
 def ensure_repo_and_upload(
@@ -155,11 +193,17 @@ def ensure_repo_and_upload(
     repo_type: str,
     logger: logging.Logger,
     commit_message: Optional[str],
+    batch_size: int,
+    max_retries: int,
+    retry_base_seconds: float,
+    retry_max_seconds: float,
 ) -> None:
     """
-    @input: modelscope path, token, repo_id namespace/name, local folder, repo_type model|dataset
+    @input: modelscope path, token, repo_id namespace/name, local folder, repo_type model|dataset;
+            batch_size (<=0: one upload of entire folder; >0: top-level entries per batch pass);
+            retry settings for all CLI calls
     @output: None on success
-    @scenario: create repo (exist_ok) then upload folder contents to repo root
+    @scenario: create repo then upload in batches or one shot
     """
     create_argv = [
         cli,
@@ -170,21 +214,72 @@ def ensure_repo_and_upload(
         "--repo_type",
         repo_type,
     ]
-    upload_argv = [
-        cli,
-        "upload",
-        repo_id,
-        str(folder.resolve()),
-        "--token",
-        token,
-        "--repo-type",
-        repo_type,
-    ]
-    if commit_message:
-        upload_argv.extend(["--commit-message", commit_message])
-    run_cmd(logger, create_argv)
-    run_cmd(logger, upload_argv)
-    logger.info("Done: uploaded %s -> %s", folder, repo_id)
+    run_cmd_with_retry(
+        logger,
+        create_argv,
+        max_retries=max_retries,
+        retry_base_seconds=retry_base_seconds,
+        retry_max_seconds=retry_max_seconds,
+    )
+
+    if batch_size <= 0:
+        upload_argv = [
+            cli,
+            "upload",
+            repo_id,
+            str(folder.resolve()),
+            "--token",
+            token,
+            "--repo-type",
+            repo_type,
+        ]
+        if commit_message:
+            upload_argv.extend(["--commit-message", commit_message])
+        run_cmd_with_retry(
+            logger,
+            upload_argv,
+            max_retries=max_retries,
+            retry_base_seconds=retry_base_seconds,
+            retry_max_seconds=retry_max_seconds,
+        )
+        logger.info("Done: uploaded %s -> %s (single upload)", folder, repo_id)
+        return
+
+    entries = sorted(folder.iterdir(), key=lambda p: p.name)
+    if not entries:
+        logger.warning("No top-level files or directories under %s; repo created only", folder)
+        return
+
+    total_batches = (len(entries) + batch_size - 1) // batch_size
+    for batch_idx, batch in enumerate(_chunks(entries, batch_size), start=1):
+        logger.info(
+            "Upload batch %s/%s (%s item(s))",
+            batch_idx,
+            total_batches,
+            len(batch),
+        )
+        for entry in batch:
+            upload_argv = [
+                cli,
+                "upload",
+                repo_id,
+                str(entry.resolve()),
+                entry.name,
+                "--token",
+                token,
+                "--repo-type",
+                repo_type,
+            ]
+            if commit_message:
+                upload_argv.extend(["--commit-message", commit_message])
+            run_cmd_with_retry(
+                logger,
+                upload_argv,
+                max_retries=max_retries,
+                retry_base_seconds=retry_base_seconds,
+                retry_max_seconds=retry_max_seconds,
+            )
+    logger.info("Done: uploaded %s -> %s (batched)", folder, repo_id)
 
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
@@ -227,6 +322,31 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         default=None,
         help="Optional commit message for the upload commit.",
     )
+    p.add_argument(
+        "--batch-size",
+        type=int,
+        default=20,
+        help="Top-level files/dirs per upload pass (default: 20). Each path is one CLI upload "
+        "(directories upload as a tree). Use 0 for a single upload of the whole folder.",
+    )
+    p.add_argument(
+        "--max-retries",
+        type=int,
+        default=-1,
+        help="Max retries per CLI after failure (-1=until success, 0=fail fast).",
+    )
+    p.add_argument(
+        "--retry-base-seconds",
+        type=float,
+        default=5.0,
+        help="Initial backoff for retries (default: 5).",
+    )
+    p.add_argument(
+        "--retry-max-seconds",
+        type=float,
+        default=300.0,
+        help="Max backoff between retries (default: 300).",
+    )
     return p.parse_args(argv)
 
 
@@ -262,6 +382,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             repo_type=args.repo_type,
             logger=logger,
             commit_message=args.commit_message,
+            batch_size=args.batch_size,
+            max_retries=args.max_retries,
+            retry_base_seconds=args.retry_base_seconds,
+            retry_max_seconds=args.retry_max_seconds,
         )
     except subprocess.CalledProcessError:
         return 1
