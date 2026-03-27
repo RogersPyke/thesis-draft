@@ -8,6 +8,13 @@
 - **Encoding**: 100% ASCII compatible. Use hex/unicode escapes if non-ASCII is unavoidable.
 </core_constraints>
 
+<environment_management>
+- **Strict Isolation**: If a required package is missing, it MUST be forcibly installed into a Virtual Environment (venv/conda) instead of the user-level site-packages.
+- **Anti-User-Site**: Implementation must avoid using or installing to the user-level site-packages (`--user`) unless explicitly requested by the user.
+- **Dependency Check**: Automatically detect environment context and prioritize local `.venv` execution.
+- **Package Manager**: Minimize reliance on global Pip; ensure all installations are scoped to the active virtual environment.
+</environment_management>
+
 <code_design_standards>
 - **Modularization**: Split code into the smallest possible logical units (Functional Programming/Decoupled Classes).
 - **File Structure**: Prefer `module.py` (core logic) + `module_utils.py` (utilities).
