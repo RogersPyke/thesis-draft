@@ -1,24 +1,103 @@
-# Git metadata and local VCS internals
+# Sync code only: align with .gitignore and third_party/RoboTwin/.gitignore (+ common policy data dirs).
+# Paths are relative to the rclone source root (this repo root).
+
+# Git metadata
 .git/**
 
-# Python cache and virtual environments
-**/__pycache__/**
+# --- Root .gitignore ---
+robotwin-data/**
+.cursor/**
+logs/**
+nohup.out
 **/*.pyc
+**/__pycache__/**
+
+# Python virtualenvs and bytecode (typical rclone exclusions)
 **/*.pyo
 .venv/**
 venv/**
 
-# Build, logs, and temporary artifacts
-logs/**
+# Logs and temp artifacts
 **/*.log
 **/*.tmp
 **/*.swp
 **/*~
 
-# Editor and IDE files
+# Editors
 .idea/**
 .vscode/**
 
-# OS-specific junk files
+# OS junk
 **/.DS_Store
 **/Thumbs.db
+
+# --- third_party/RoboTwin/.gitignore (mapped to repo-root paths) ---
+
+# RoboTwin /data (keep process_stuck.py)
+third_party/RoboTwin/data/**
+!third_party/RoboTwin/data/process_stuck.py
+
+third_party/RoboTwin/**/result/**
+third_party/RoboTwin/envs/curobo/**
+third_party/RoboTwin/**/*.zip
+third_party/RoboTwin/**/viewer_show.*
+third_party/RoboTwin/**/eval_video/**
+
+third_party/RoboTwin/eval_result/**
+
+# assets (keep _download.py and files tree)
+third_party/RoboTwin/assets/**
+!third_party/RoboTwin/assets/_download.py
+!third_party/RoboTwin/assets/files
+!third_party/RoboTwin/assets/files/**
+
+third_party/RoboTwin/**/policy/weights/**
+
+third_party/RoboTwin/config.json
+third_party/RoboTwin/*.json*
+third_party/RoboTwin/*.txt
+
+third_party/RoboTwin/docs/**
+third_party/RoboTwin/logs/**
+
+**/training_data/**
+**/processed_data/**
+third_party/RoboTwin/policy/TinyVLA/data/**
+
+**/checkpoints/**
+**/*ckpt*/**
+
+third_party/RoboTwin/policy/TinyVLA/model_param/**
+
+third_party/RoboTwin/script/curobo/**
+
+# --- Nested RoboTwin policy .gitignore (data / experiment outputs) ---
+
+**/wandb/**
+third_party/RoboTwin/**/data_local/**
+third_party/RoboTwin/policy/ACT/results/**
+third_party/RoboTwin/policy/ACT/outputs/**
+third_party/RoboTwin/policy/ACT/act_ckpt/**
+third_party/RoboTwin/policy/ACT/act-ckpt/**
+third_party/RoboTwin/policy/ACT/bin
+third_party/RoboTwin/policy/ACT/bin/**
+third_party/RoboTwin/policy/DP/data/**
+third_party/RoboTwin/policy/DP3/3D-Diffusion-Policy/data/**
+third_party/RoboTwin/policy/DP3/third_party/**
+third_party/RoboTwin/policy/pi0/assets/**
+third_party/RoboTwin/policy/pi0/data/**
+third_party/RoboTwin/policy/pi05/assets/**
+third_party/RoboTwin/policy/pi05/data/**
+third_party/RoboTwin/policy/RDT/model_config/*.yml
+third_party/RoboTwin/policy/RDT/data/datasets/**
+
+# openvla-oft/.gitignore (data and experiment artifacts)
+third_party/RoboTwin/policy/openvla-oft/**/data/**
+third_party/RoboTwin/policy/openvla-oft/**/cache/**
+third_party/RoboTwin/policy/openvla-oft/**/rollouts/**
+third_party/RoboTwin/policy/openvla-oft/tensorflow_datasets/**
+third_party/RoboTwin/policy/openvla-oft/aloha_ckpts_and_logs/**
+third_party/RoboTwin/policy/openvla-oft/**/*chkpt
+third_party/RoboTwin/policy/openvla-oft/**/eval_*.share
+third_party/RoboTwin/policy/openvla-oft/**/finetune_*.sh
+third_party/RoboTwin/policy/openvla-oft/log.txt
