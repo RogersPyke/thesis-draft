@@ -101,3 +101,6 @@ third_party/RoboTwin/policy/openvla-oft/**/*chkpt
 third_party/RoboTwin/policy/openvla-oft/**/eval_*.share
 third_party/RoboTwin/policy/openvla-oft/**/finetune_*.sh
 third_party/RoboTwin/policy/openvla-oft/log.txt
+
+# Conda env packs
+/conda_env/*

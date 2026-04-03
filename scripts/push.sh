@@ -27,7 +27,7 @@ DEFAULT_PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 PROJECT_ROOT="${DEFAULT_PROJECT_ROOT}"
 REMOTE_NAME="BAAI-emllm"
-REMOTE_BASE_DIR="/home/zylong/mnt/BAAI-emllm"
+REMOTE_BASE_DIR="/home/shwu/zylong/mnt/BAAI-emllm"
 REMOTE_DIR=""
 IGNORE_FILE=""
 DRY_RUN="false"

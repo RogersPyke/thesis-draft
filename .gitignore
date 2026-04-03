@@ -4,3 +4,7 @@ logs/
 nohup.out
 **.pyc
 **/__pycache__/**
+
+# conda env packs
+/conda_env/*
+/conda_pack/*
