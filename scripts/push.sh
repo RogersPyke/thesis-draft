@@ -13,7 +13,7 @@ set -euo pipefail
 #       --project-root [string, absolute/relative path, existing directory]
 #       --remote [string, rclone remote name, default: BAAI-emllm]
 #       --remote-dir [string, path under remote root, default: current directory name]
-#       --ignore-file [string, path to rclone ignore file, default: .rcloneignore in project root]
+#       --ignore-file [string, path to ignore file, default: .rcloneignore; gitignore-like, "!" negates]
 #       --dry-run [flag, no data changes]
 # @output:
 #   - Exit 0 on success, non-zero on failure.
@@ -21,6 +21,18 @@ set -euo pipefail
 #   - Writes detailed logs in real time to <project-root>/rclone.log (--log-file).
 # @scenario:
 #   - Keep this project synchronized to a remote storage/server via rclone.
+#
+# Sync policy (see .rcloneignore, gitignore-like):
+#   - Paths matched by exclude rules (lines without leading "!") are out of scope:
+#     not uploaded from local, not compared, and not deleted on remote unless
+#     you pass rclone's --delete-excluded (this script never adds it).
+#   - Lines starting with "!" are include/negation rules: those paths stay in the
+#     synced set even when a broader exclude would hide them (first matching
+#     filter rule wins; include rules are written before excludes).
+#   - Everything else is mirrored strictly: rclone sync adds missing files,
+#     updates changed files, and deletes extra files on the remote so the
+#     destination matches local for in-scope paths only. No --update: local is
+#     the source of truth when size/modtime differ.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -41,7 +53,7 @@ Options:
   --project-root <path>  Project root to sync. Default: repo root of this script.
   --remote <name>        Rclone remote name. Default: BAAI-emllm.
   --remote-dir <path>    Full destination path under remote.
-                         Default: /home/zylong/mnt/BAAI-emllm/<project-dir-name>.
+                         Default: /home/shwu/zylong/mnt/BAAI-emllm/<project-dir-name>.
   --ignore-file <path>   Rclone ignore file. Default: <project-root>/.rcloneignore.
   --dry-run              Show planned changes without modifying remote.
   -h, --help             Show this help and exit.
@@ -54,6 +66,47 @@ ensure_command() {
     echo "[ERROR] Required command not found: ${cmd}" >&2
     exit 1
   fi
+}
+
+build_rclone_filter_file() {
+  local ignore_file="$1"
+  local filter_file="$2"
+  local line=""
+  local rule=""
+  local -a include_rules=()
+  local -a exclude_rules=()
+
+  : >"${filter_file}"
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    # Skip comments and blank lines.
+    if [[ -z "${line}" || "${line}" == \#* ]]; then
+      continue
+    fi
+
+    # Gitignore-style negation: "!" forces path back into the synced set.
+    if [[ "${line}" == !* ]]; then
+      rule="${line#!}"
+      include_rules+=("${rule}")
+      continue
+    fi
+
+    exclude_rules+=("${line}")
+    # Plain path (no glob chars): also exclude descendants.
+    if [[ "${line}" != *"*"* && "${line}" != *"?"* && "${line}" != *"["* ]]; then
+      if [[ "${line}" == */ ]]; then
+        exclude_rules+=("${line}**")
+      else
+        exclude_rules+=("${line}/**")
+      fi
+    fi
+  done <"${ignore_file}"
+
+  for rule in "${include_rules[@]}"; do
+    printf '+ %s\n' "${rule}" >>"${filter_file}"
+  done
+  for rule in "${exclude_rules[@]}"; do
+    printf -- '- %s\n' "${rule}" >>"${filter_file}"
+  done
 }
 
 parse_args() {
@@ -120,6 +173,7 @@ main() {
   fi
 
   local dst="${REMOTE_NAME}:${REMOTE_DIR}"
+  local filter_file=""
   local -a cmd=(
     rclone sync
     "${PROJECT_ROOT}/"
@@ -129,11 +183,13 @@ main() {
     --transfers 8
     --checkers 16
     --links
-    --update
   )
 
   if [[ -n "${IGNORE_FILE}" ]]; then
-    cmd+=(--exclude-from "${IGNORE_FILE}")
+    filter_file="$(mktemp)"
+    trap '[[ -n "${filter_file:-}" && -f "${filter_file:-}" ]] && rm -f "${filter_file:-}"' EXIT
+    build_rclone_filter_file "${IGNORE_FILE}" "${filter_file}"
+    cmd+=(--filter-from "${filter_file}")
   fi
   if [[ "${DRY_RUN}" == "true" ]]; then
     cmd+=(--dry-run)
@@ -150,6 +206,7 @@ main() {
 
   # Detailed, line-buffered-style log file (rclone flushes continuously). DEBUG is max practical level but too much, use info now.
   local log_file="${PROJECT_ROOT}/logs/rclone.log"
+  mkdir -p "${PROJECT_ROOT}/logs"
   {
     printf '%s\n' "===== push.sh run start $(date -u +"%Y-%m-%dT%H:%M:%SZ") UTC ====="
     printf '%s\n' "source=${PROJECT_ROOT}/ destination=${dst} dry_run=${DRY_RUN}"

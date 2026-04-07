@@ -30,6 +30,7 @@ venv/**
 # OS junk
 **/.DS_Store
 **/Thumbs.db
+**/__MACOSX
 
 # --- third_party/RoboTwin/.gitignore (mapped to repo-root paths) ---
 
@@ -45,17 +46,16 @@ third_party/RoboTwin/**/eval_video/**
 
 third_party/RoboTwin/eval_result/**
 
-# assets (keep _download.py and files tree)
-third_party/RoboTwin/assets/**
-!third_party/RoboTwin/assets/_download.py
-!third_party/RoboTwin/assets/files
-!third_party/RoboTwin/assets/files/**
+# assets (exclude all recursively, keep _download.py only)
+# !third_party/RoboTwin/assets/
+# third_party/RoboTwin/assets/**
+# !third_party/RoboTwin/assets/_download.py
 
 third_party/RoboTwin/**/policy/weights/**
 
-third_party/RoboTwin/config.json
-third_party/RoboTwin/*.json*
-third_party/RoboTwin/*.txt
+# third_party/RoboTwin/config.json
+# third_party/RoboTwin/*.json*
+# third_party/RoboTwin/*.txt
 
 third_party/RoboTwin/docs/**
 third_party/RoboTwin/logs/**
@@ -67,7 +67,8 @@ third_party/RoboTwin/policy/TinyVLA/data/**
 **/checkpoints/**
 **/*ckpt*/**
 
-third_party/RoboTwin/policy/TinyVLA/model_param/**
+# third_party/RoboTwin/policy/TinyVLA/model_param/**
+# --- keep internVL3-1B for TinyVLA ---
 
 third_party/RoboTwin/script/curobo/**
 
@@ -81,13 +82,17 @@ third_party/RoboTwin/policy/ACT/act_ckpt/**
 third_party/RoboTwin/policy/ACT/act-ckpt/**
 third_party/RoboTwin/policy/ACT/bin
 third_party/RoboTwin/policy/ACT/bin/**
+
 third_party/RoboTwin/policy/DP/data/**
+
 third_party/RoboTwin/policy/DP3/3D-Diffusion-Policy/data/**
 third_party/RoboTwin/policy/DP3/third_party/**
+
 third_party/RoboTwin/policy/pi0/assets/**
 third_party/RoboTwin/policy/pi0/data/**
 third_party/RoboTwin/policy/pi05/assets/**
 third_party/RoboTwin/policy/pi05/data/**
+
 third_party/RoboTwin/policy/RDT/model_config/*.yml
 third_party/RoboTwin/policy/RDT/data/datasets/**
 
@@ -102,5 +107,5 @@ third_party/RoboTwin/policy/openvla-oft/**/eval_*.share
 third_party/RoboTwin/policy/openvla-oft/**/finetune_*.sh
 third_party/RoboTwin/policy/openvla-oft/log.txt
 
-# Conda env packs
-/conda_env/*
+# Conda env packs (recursive: * does not cross path separators; ** covers full tree)
+/envs/**
